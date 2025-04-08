@@ -20,10 +20,16 @@ except ImportError:
 
 import os
 
+import digitalio
+
 import lib.pysquared.nvm.register as register
 from lib.pysquared.config.config import Config
+from lib.pysquared.hardware.busio import _spi_init
+from lib.pysquared.hardware.digitalio import initialize_pin
+from lib.pysquared.hardware.radio.manager.rfm9x import RFM9xManager
 from lib.pysquared.logger import Logger
 from lib.pysquared.nvm.counter import Counter
+from lib.pysquared.nvm.flag import Flag
 from lib.pysquared.rtc.manager.microcontroller import MicrocontrollerManager
 from lib.pysquared.watchdog import Watchdog
 from version import __version__
@@ -55,48 +61,56 @@ try:
     config: Config = Config("config.json")
 
     # TODO(nateinaction): fix spi init
-    # spi0 = _spi_init(
-    #     logger,
-    #     board.SPI1_SCK,
-    #     board.SPI1_MOSI,
-    #     board.SPI1_MISO,
+    spi1 = _spi_init(
+        logger,
+        board.SPI1_SCK,
+        board.SPI1_MOSI,
+        board.SPI1_MISO,
+    )
+    radio = RFM9xManager(
+        logger,
+        config.radio,
+        Flag(index=register.FLAG, bit_index=7, datastore=microcontroller.nvm),
+        spi1,
+        initialize_pin(logger, board.SPI1_CS0, digitalio.Direction.OUTPUT, True),
+        initialize_pin(logger, board.RF1_RST, digitalio.Direction.OUTPUT, True),
+    )
+
+    # import time
+
+    # from lib.micropySX126X.sx1262 import SX1262
+
+    # sx = SX1262(
+    #     spi_bus=1,
+    #     clk=board.SPI1_SCK,
+    #     mosi=board.SPI1_MOSI,
+    #     miso=board.SPI1_MISO,
+    #     cs=board.SPI0_CS0,
+    #     irq=board.RF2_IO0,
+    #     rst=board.RF1_RST,
+    #     gpio=board.RF2_IO4,
     # )
 
-    import time
-
-    from lib.micropySX126X.sx1262 import SX1262
-
-    sx = SX1262(
-        spi_bus=1,
-        clk=board.SPI1_SCK,
-        mosi=board.SPI1_MOSI,
-        miso=board.SPI1_MISO,
-        cs=board.SPI0_CS0,
-        irq=board.RF2_IO0,
-        rst=board.RF1_RST,
-        gpio=board.RF2_IO4,
-    )
-
-    print("begin SX1262")
-    # LoRa
-    sx.begin(
-        freq=900,
-        bw=500.0,
-        sf=12,
-        cr=8,
-        syncWord=0x12,
-        power=-5,
-        currentLimit=60.0,
-        preambleLength=8,
-        implicit=False,
-        implicitLen=0xFF,
-        crcOn=True,
-        txIq=False,
-        rxIq=False,
-        tcxoVoltage=1.7,
-        useRegulatorLDO=False,
-        blocking=True,
-    )
+    # print("begin SX1262")
+    # # LoRa
+    # sx.begin(
+    #     freq=900,
+    #     bw=500.0,
+    #     sf=12,
+    #     cr=8,
+    #     syncWord=0x12,
+    #     power=-5,
+    #     currentLimit=60.0,
+    #     preambleLength=8,
+    #     implicit=False,
+    #     implicitLen=0xFF,
+    #     crcOn=True,
+    #     txIq=False,
+    #     rxIq=False,
+    #     tcxoVoltage=1.7,
+    #     useRegulatorLDO=False,
+    #     blocking=True,
+    # )
 
     # FSK
     ##sx.beginFSK(freq=923, br=48.0, freqDev=50.0, rxBw=156.2, power=-5, currentLimit=60.0,
