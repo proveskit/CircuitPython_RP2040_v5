@@ -8,10 +8,8 @@ Version: 2.0.0
 Published: Nov 19, 2024
 """
 
-import gc
 import time
 
-import digitalio
 import microcontroller
 
 try:
@@ -22,21 +20,11 @@ except ImportError:
 
 import os
 
-import lib.pysquared.functions as functions
 import lib.pysquared.nvm.register as register
-from lib.pysquared.cdh import CommandDataHandler
 from lib.pysquared.config.config import Config
-from lib.pysquared.hardware.busio import _spi_init, initialize_i2c_bus
-from lib.pysquared.hardware.digitalio import initialize_pin
-from lib.pysquared.hardware.imu.manager.lsm6dsox import LSM6DSOXManager
-from lib.pysquared.hardware.magnetometer.manager.lis2mdl import LIS2MDLManager
-from lib.pysquared.hardware.radio.manager.sx126x import SX126xManager
 from lib.pysquared.logger import Logger
 from lib.pysquared.nvm.counter import Counter
-from lib.pysquared.nvm.flag import Flag
 from lib.pysquared.rtc.manager.microcontroller import MicrocontrollerManager
-from lib.pysquared.satellite import Satellite
-from lib.pysquared.sleep_helper import SleepHelper
 from lib.pysquared.watchdog import Watchdog
 from version import __version__
 
@@ -67,149 +55,206 @@ try:
     config: Config = Config("config.json")
 
     # TODO(nateinaction): fix spi init
-    spi0 = _spi_init(
-        logger,
-        board.SPI1_SCK,
-        board.SPI1_MOSI,
-        board.SPI1_MISO,
+    # spi0 = _spi_init(
+    #     logger,
+    #     board.SPI1_SCK,
+    #     board.SPI1_MOSI,
+    #     board.SPI1_MISO,
+    # )
+
+    import time
+
+    from lib.micropySX126X.sx1262 import SX1262
+
+    sx = SX1262(
+        spi_bus=1,
+        clk=board.SPI1_SCK,
+        mosi=board.SPI1_MOSI,
+        miso=board.SPI1_MISO,
+        cs=board.SPI0_CS0,
+        irq=board.RF2_IO0,
+        rst=board.RF1_RST,
+        gpio=board.RF2_IO4,
     )
 
-    radio = SX126xManager(
-        logger,
-        config.radio,
-        Flag(index=register.FLAG, bit_index=7, datastore=microcontroller.nvm),
-        spi0,
-        initialize_pin(logger, board.SPI0_CS0, digitalio.Direction.OUTPUT, True),
-        board.RF2_IO0,
-        initialize_pin(logger, board.RF1_RST, digitalio.Direction.OUTPUT, True),
-        board.RF2_IO4,
+    print("begin SX1262")
+    # LoRa
+    sx.begin(
+        freq=900,
+        bw=500.0,
+        sf=12,
+        cr=8,
+        syncWord=0x12,
+        power=-5,
+        currentLimit=60.0,
+        preambleLength=8,
+        implicit=False,
+        implicitLen=0xFF,
+        crcOn=True,
+        txIq=False,
+        rxIq=False,
+        tcxoVoltage=1.7,
+        useRegulatorLDO=False,
+        blocking=True,
     )
 
-    i2c1 = initialize_i2c_bus(
-        logger,
-        board.I2C1_SCL,
-        board.I2C1_SDA,
-        100000,
-    )
+    # FSK
+    ##sx.beginFSK(freq=923, br=48.0, freqDev=50.0, rxBw=156.2, power=-5, currentLimit=60.0,
+    ##            preambleLength=16, dataShaping=0.5, syncWord=[0x2D, 0x01], syncBitsLength=16,
+    ##            addrFilter=SX126X_GFSK_ADDRESS_FILT_OFF, addr=0x00, crcLength=2, crcInitial=0x1D0F, crcPolynomial=0x1021,
+    ##            crcInverted=True, whiteningOn=True, whiteningInitial=0x0100,
+    ##            fixedPacketLength=False, packetLength=0xFF, preambleDetectorLength=SX126X_GFSK_PREAMBLE_DETECT_16,
+    ##            tcxoVoltage=1.6, useRegulatorLDO=False,
+    ##            blocking=True)
 
-    magnetometer = LIS2MDLManager(logger, i2c1)
+    # while True:
+    #     msg, err = sx.recv()
+    #     if len(msg) > 0:
+    #         error = SX1262.STATUS[err]
+    #         print(msg)
+    #         print(error)
 
-    imu = LSM6DSOXManager(logger, i2c1, 0x6B)
+    # while True:
+    #     sx.send(b"Hello World!")
+    #     time.sleep(10)
 
-    c = Satellite(logger, config)
+    # radio = SX126xManager(
+    #     logger,
+    #     config.radio,
+    #     Flag(index=register.FLAG, bit_index=7, datastore=microcontroller.nvm),
+    #     spi0,
+    #     initialize_pin(logger, board.SPI0_CS0, digitalio.Direction.OUTPUT, True),
+    #     board.RF2_IO0,
+    #     initialize_pin(logger, board.RF1_RST, digitalio.Direction.OUTPUT, True),
+    #     board.RF2_IO4,
+    # )
+    # print("poke 123")
 
-    sleep_helper = SleepHelper(c, logger, watchdog)
+#     i2c1 = initialize_i2c_bus(
+#         logger,
+#         board.I2C1_SCL,
+#         board.I2C1_SDA,
+#         100000,
+#     )
 
-    cdh = CommandDataHandler(config, logger, radio)
+#     magnetometer = LIS2MDLManager(logger, i2c1)
 
-    f = functions.functions(
-        c,
-        logger,
-        config,
-        sleep_helper,
-        radio,
-        magnetometer,
-        imu,
-        watchdog,
-        cdh,
-    )
+#     imu = LSM6DSOXManager(logger, i2c1, 0x6B)
 
-    def initial_boot():
-        watchdog.pet()
-        f.beacon()
-        watchdog.pet()
-        f.listen()
-        watchdog.pet()
+#     c = Satellite(logger, config)
 
-    try:
-        c.boot_count.increment()
+#     sleep_helper = SleepHelper(c, logger, watchdog)
 
-        logger.info(
-            "FC Board Stats",
-            bytes_remaining=gc.mem_free(),
-            boot_number=c.boot_count.get(),
-        )
+#     cdh = CommandDataHandler(config, logger, radio)
 
-        initial_boot()
+#     f = functions.functions(
+#         c,
+#         logger,
+#         config,
+#         sleep_helper,
+#         radio,
+#         magnetometer,
+#         imu,
+#         watchdog,
+#         cdh,
+#     )
 
-    except Exception as e:
-        logger.error("Error in Boot Sequence", e)
+#     def initial_boot():
+#         watchdog.pet()
+#         f.beacon()
+#         watchdog.pet()
+#         f.listen()
+#         watchdog.pet()
 
-    finally:
-        pass
+#     try:
+#         c.boot_count.increment()
 
-    def send_imu_data():
-        logger.info("Looking to get imu data...")
-        IMUData = []
-        watchdog.pet()
-        logger.info("IMU has baton")
-        IMUData = imu.get_gyro_data()
-        watchdog.pet()
-        radio.send(IMUData)
+#         logger.info(
+#             "FC Board Stats",
+#             bytes_remaining=gc.mem_free(),
+#             boot_number=c.boot_count.get(),
+#         )
 
-    def main():
-        f.beacon()
+#         initial_boot()
 
-        f.listen_loiter()
+#     except Exception as e:
+#         logger.error("Error in Boot Sequence", e)
 
-        f.state_of_health()
+#     finally:
+#         pass
 
-        f.listen_loiter()
+#     def send_imu_data():
+#         logger.info("Looking to get imu data...")
+#         IMUData = []
+#         watchdog.pet()
+#         logger.info("IMU has baton")
+#         IMUData = imu.get_gyro_data()
+#         watchdog.pet()
+#         radio.send(IMUData)
 
-        f.all_face_data()
-        watchdog.pet()
-        f.send_face()
+#     def main():
+#         f.beacon()
 
-        f.listen_loiter()
+#         f.listen_loiter()
 
-        send_imu_data()
+#         f.state_of_health()
 
-        f.listen_loiter()
+#         f.listen_loiter()
 
-        f.joke()
+#         f.all_face_data()
+#         watchdog.pet()
+#         f.send_face()
 
-        f.listen_loiter()
+#         f.listen_loiter()
 
-    def critical_power_operations():
-        initial_boot()
-        watchdog.pet()
+#         send_imu_data()
 
-        sleep_helper.long_hibernate()
+#         f.listen_loiter()
 
-    def minimum_power_operations():
-        initial_boot()
-        watchdog.pet()
+#         f.joke()
 
-        sleep_helper.short_hibernate()
+#         f.listen_loiter()
 
-    ######################### MAIN LOOP ##############################
-    try:
-        while True:
-            # L0 automatic tasks no matter the battery level
-            c.check_reboot()
+#     def critical_power_operations():
+#         initial_boot()
+#         watchdog.pet()
 
-            if c.power_mode == "critical":
-                critical_power_operations()
+#         sleep_helper.long_hibernate()
 
-            elif c.power_mode == "minimum":
-                minimum_power_operations()
+#     def minimum_power_operations():
+#         initial_boot()
+#         watchdog.pet()
 
-            elif c.power_mode == "normal":
-                main()
+#         sleep_helper.short_hibernate()
 
-            elif c.power_mode == "maximum":
-                main()
+#     ######################### MAIN LOOP ##############################
+#     try:
+#         while True:
+#             # L0 automatic tasks no matter the battery level
+#             c.check_reboot()
 
-            else:
-                f.listen()
+#             if c.power_mode == "critical":
+#                 critical_power_operations()
 
-    except Exception as e:
-        logger.critical("Critical in Main Loop", e)
-        time.sleep(10)
-        microcontroller.on_next_reset(microcontroller.RunMode.NORMAL)
-        microcontroller.reset()
-    finally:
-        logger.info("Going Neutral!")
+#             elif c.power_mode == "minimum":
+#                 minimum_power_operations()
+
+#             elif c.power_mode == "normal":
+#                 main()
+
+#             elif c.power_mode == "maximum":
+#                 main()
+
+#             else:
+#                 f.listen()
+
+#     except Exception as e:
+#         logger.critical("Critical in Main Loop", e)
+#         time.sleep(10)
+#         microcontroller.on_next_reset(microcontroller.RunMode.NORMAL)
+#         microcontroller.reset()
+#     finally:
+#         logger.info("Going Neutral!")
 
 except Exception as e:
     logger.critical("An exception occured within main.py", e)
