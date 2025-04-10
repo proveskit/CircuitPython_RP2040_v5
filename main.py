@@ -20,8 +20,11 @@ except ImportError:
 
 import os
 
+from digitalio import Direction
+
 import lib.pysquared.nvm.register as register
 from lib.pysquared.config.config import Config
+from lib.pysquared.hardware.digitalio import initialize_pin
 from lib.pysquared.logger import Logger
 from lib.pysquared.nvm.counter import Counter
 from lib.pysquared.rtc.manager.microcontroller import MicrocontrollerManager
@@ -71,32 +74,41 @@ try:
         clk=board.SPI1_SCK,
         mosi=board.SPI1_MOSI,
         miso=board.SPI1_MISO,
-        cs=board.SPI0_CS0,
+        cs=board.SPI1_CS0,
         irq=board.RF2_IO0,
-        rst=board.RF1_RST,
+        rst=board.RF2_RST,
         gpio=board.RF2_IO4,
     )
 
+    sx.setCurrentLimit(60.0)
+    print(sx.getCurrentLimit())
+    exit()
+
     print("begin SX1262")
     # LoRa
-    sx.begin(
-        freq=900,
-        bw=500.0,
-        sf=12,
-        cr=8,
-        syncWord=0x12,
-        power=-5,
-        currentLimit=60.0,
-        preambleLength=8,
-        implicit=False,
-        implicitLen=0xFF,
-        crcOn=True,
-        txIq=False,
-        rxIq=False,
-        tcxoVoltage=1.7,
-        useRegulatorLDO=False,
-        blocking=True,
-    )
+    # sx.begin(
+    #     freq=434.0,
+    #     bw=500.0,
+    #     sf=12,
+    #     cr=8,
+    #     syncWord=0x12,
+    #     power=18,
+    #     currentLimit=60.0,
+    #     preambleLength=8,
+    #     implicit=False,
+    #     implicitLen=0xFF,
+    #     crcOn=True,
+    #     txIq=False,
+    #     rxIq=False,
+    #     tcxoVoltage=1.7,
+    #     useRegulatorLDO=False,
+    #     blocking=True,
+    # )
+
+    # def cb():
+    #     print("Hello World")
+
+    # sx.setBlockingCallback(blocking=False, callback=cb)
 
     # FSK
     ##sx.beginFSK(freq=923, br=48.0, freqDev=50.0, rxBw=156.2, power=-5, currentLimit=60.0,
@@ -114,9 +126,15 @@ try:
     #         print(msg)
     #         print(error)
 
-    # while True:
-    #     sx.send(b"Hello World!")
-    #     time.sleep(10)
+    rxpin = initialize_pin(logger, board.RF2_RX_EN, Direction.OUTPUT, False)
+    txpin = initialize_pin(logger, board.RF2_TX_EN, Direction.OUTPUT, False)
+
+    while True:
+        txpin.value = True
+        time.sleep(0.02)
+        sx.send(b"Hello World!")
+        print("Sent")
+        time.sleep(1)
 
     # radio = SX126xManager(
     #     logger,
