@@ -20,16 +20,14 @@ except ImportError:
 
 import os
 
-import digitalio
+import sdcardio
+import storage
 
 import lib.pysquared.nvm.register as register
 from lib.pysquared.config.config import Config
 from lib.pysquared.hardware.busio import _spi_init
-from lib.pysquared.hardware.digitalio import initialize_pin
-from lib.pysquared.hardware.radio.manager.rfm9x import RFM9xManager
 from lib.pysquared.logger import Logger
 from lib.pysquared.nvm.counter import Counter
-from lib.pysquared.nvm.flag import Flag
 from lib.pysquared.rtc.manager.microcontroller import MicrocontrollerManager
 from lib.pysquared.watchdog import Watchdog
 from version import __version__
@@ -67,14 +65,21 @@ try:
         board.SPI1_MOSI,
         board.SPI1_MISO,
     )
-    radio = RFM9xManager(
-        logger,
-        config.radio,
-        Flag(index=register.FLAG, bit_index=7, datastore=microcontroller.nvm),
-        spi1,
-        initialize_pin(logger, board.SPI1_CS0, digitalio.Direction.OUTPUT, True),
-        initialize_pin(logger, board.RF1_RST, digitalio.Direction.OUTPUT, True),
-    )
+
+    os.mkdir("/sd", 0o777)
+    sd = sdcardio.SDCard(spi1, board.SPI1_CS1, 100000)
+    vfs = storage.VfsFat(sd)
+    storage.mount(vfs, "/sd")
+    print(os.listdir("/sd"))
+
+    # radio = RFM9xManager(
+    #     logger,
+    #     config.radio,
+    #     Flag(index=register.FLAG, bit_index=7, datastore=microcontroller.nvm),
+    #     spi1,
+    #     initialize_pin(logger, board.SPI1_CS0, digitalio.Direction.OUTPUT, True),
+    #     initialize_pin(logger, board.RF1_RST, digitalio.Direction.OUTPUT, True),
+    # )
 
     # import time
 
